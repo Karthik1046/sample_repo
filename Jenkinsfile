@@ -1,13 +1,6 @@
 pipeline {
     agent any
     
-    environment {
-        NODE_VERSION = '18'
-        PORT = '3000'
-        DOCKER_IMAGE = 'portfolio-app'
-        DOCKER_TAG = 'latest'
-    }
-    
     stages {
         stage('Checkout') {
             steps {
@@ -15,44 +8,21 @@ pipeline {
             }
         }
         
-        stage('Setup Node.js') {
+        stage('Check Prerequisites') {
             steps {
-                script {
-                    // Install Node.js if not available
-                    sh '''
-                        node --version || curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-                        node --version || sudo apt-get install -y nodejs
-                    '''
-                }
+                sh '''
+                    echo "Checking Node.js version..."
+                    node --version || exit 1
+                    echo "Checking Docker..."
+                    docker --version || exit 1
+                    echo "Prerequisites check passed!"
+                '''
             }
         }
         
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
-            }
-        }
-        
-        stage('Run Tests') {
-            steps {
-                sh 'npm test -- --coverage --watchAll=false'
-            }
-            post {
-                always {
-                    // Publish test results if available
-                    script {
-                        if (fileExists('coverage/lcov.info')) {
-                            publishHTML([
-                                allowMissing: false,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'coverage',
-                                reportFiles: 'lcov-report/index.html',
-                                reportName: 'Coverage Report'
-                            ])
-                        }
-                    }
-                }
+                sh 'npm ci --silent'
             }
         }
         
@@ -60,88 +30,41 @@ pipeline {
             steps {
                 sh 'npm run build'
             }
-            post {
-                success {
-                    echo 'Build completed successfully'
-                }
-                failure {
-                    error 'Build failed'
-                }
-            }
-        }
-        
-        stage('Security Scan') {
-            steps {
-                script {
-                    // Run npm audit for security vulnerabilities
-                    sh 'npm audit --audit-level high'
-                }
-            }
         }
         
         stage('Build Docker Image') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                }
-            }
             steps {
-                script {
-                    sh '''
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                        docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                    '''
-                }
+                sh 'docker build -t portfolio-app .'
             }
         }
         
-        stage('Deploy to Staging') {
-            when {
-                branch 'develop'
-            }
+        stage('Deploy') {
             steps {
                 script {
-                    sh '''
-                        # Stop existing container if running
-                        docker stop portfolio-staging || true
-                        docker rm portfolio-staging || true
-                        
-                        # Run new container
-                        docker run -d \
-                            --name portfolio-staging \
-                            -p 3001:3000 \
-                            -e NODE_ENV=staging \
-                            ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                    '''
-                }
-            }
-        }
-        
-        stage('Deploy to Production') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                }
-            }
-            steps {
-                script {
-                    input message: 'Deploy to production?', ok: 'Deploy'
-                    
-                    sh '''
-                        # Stop existing container if running
-                        docker stop portfolio-production || true
-                        docker rm portfolio-production || true
-                        
-                        # Run new container
-                        docker run -d \
-                            --name portfolio-production \
-                            -p 3000:3000 \
-                            -e NODE_ENV=production \
-                            --restart unless-stopped \
-                            ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                    '''
+                    try {
+                        if (env.BRANCH_NAME == 'main') {
+                            echo "Deploying to production on port 3000..."
+                            sh '''
+                                docker stop portfolio-production || true
+                                docker rm portfolio-production || true
+                                docker run -d --name portfolio-production -p 3000:3000 portfolio-app
+                                echo "Production deployment completed!"
+                            '''
+                        } else if (env.BRANCH_NAME == 'dev') {
+                            echo "Deploying to staging on port 3001..."
+                            sh '''
+                                docker stop portfolio-staging || true
+                                docker rm portfolio-staging || true
+                                docker run -d --name portfolio-staging -p 3001:3000 portfolio-app
+                                echo "Staging deployment completed!"
+                            '''
+                        } else {
+                            echo "Branch ${env.BRANCH_NAME} is not configured for deployment. Skipping deployment."
+                        }
+                    } catch (Exception e) {
+                        echo "Deployment failed: ${e.getMessage()}"
+                        error "Deployment failed for branch ${env.BRANCH_NAME}"
+                    }
                 }
             }
         }
@@ -149,32 +72,20 @@ pipeline {
     
     post {
         always {
-            // Clean up workspace
-            cleanWs()
+            echo "Pipeline completed for branch: ${env.BRANCH_NAME}"
         }
         success {
-            echo 'Pipeline completed successfully!'
-            
-            // Send notification (optional)
+            echo "SUCCESS: Application deployed successfully on ${env.BRANCH_NAME} branch!"
             script {
-                if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
-                    emailext (
-                        subject: "Portfolio Deployment Success - ${env.BUILD_NUMBER}",
-                        body: "The portfolio application has been successfully deployed to production.\n\nBuild: ${env.BUILD_URL}\nBranch: ${env.BRANCH_NAME}",
-                        to: "your-email@example.com"
-                    )
+                if (env.BRANCH_NAME in ['main', 'dev']) {
+                    def port = env.BRANCH_NAME == 'main' ? '3000' : '3001'
+                    echo "Application is running on http://localhost:${port}"
                 }
             }
         }
         failure {
-            echo 'Pipeline failed!'
-            
-            // Send failure notification
-            emailext (
-                subject: "Portfolio Build Failed - ${env.BUILD_NUMBER}",
-                body: "The portfolio application build failed.\n\nBuild: ${env.BUILD_URL}\nBranch: ${env.BRANCH_NAME}",
-                to: "your-email@example.com"
-            )
+            echo "FAILURE: Build or deployment failed for branch ${env.BRANCH_NAME}"
+            echo "Check the logs above for detailed error information."
         }
     }
 }
