@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ExternalLink, GitBranch, Eye } from 'lucide-react';
+import { ExternalLink, GitBranch } from 'lucide-react';
 
 const Projects = () => {
   const containerVariants = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Menu, X, GitBranch, Globe, Mail } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -34,7 +34,7 @@ const Navbar = () => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [navItems]);
 
   return (
     <motion.nav
