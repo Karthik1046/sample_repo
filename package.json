@@ -22,7 +22,11 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
+    "test": "react-scripts test -- --coverage --watchAll=false",
+    "test:ci": "react-scripts test -- --coverage --watchAll=false --ci",
+    "build:prod": "react-scripts build",
+    "docker:build": "docker build -t portfolio-app .",
+    "docker:run": "docker run -p 3000:3000 portfolio-app",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
