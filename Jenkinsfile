@@ -6,6 +6,7 @@ pipeline {
     }
 
     stages {
+
         stage('Set Port Based on Branch') {
             steps {
                 script {
@@ -22,16 +23,24 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Install Dependencies') {
             steps {
                 sh 'npm install'
             }
         }
 
-        stage('Run App') {
+        stage('Free Port') {
             steps {
                 sh """
-                PORT=${PORT} nohup npm start &
+                fuser -k ${PORT}/tcp || true
+                """
+            }
+        }
+
+        stage('Run React App') {
+            steps {
+                sh """
+                nohup PORT=${PORT} npm start > app.log 2>&1 &
                 """
             }
         }
