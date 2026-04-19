@@ -9,7 +9,7 @@ WORKDIR /app
 COPY devops-jenkins-docker/app/package*.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 – Final Runtime Image
